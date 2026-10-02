@@ -166,6 +166,49 @@ class MainFlowTests(unittest.TestCase):
         self.main.run()
         self.assertLess(EVENTS.index("x-connect"), EVENTS.index("show"))
 
+    def test_usb_connection_closes_the_card(self):
+        """Plugging into a computer (hal usbConfigured) must close the card,
+        with no tap; a wall charger (usbPlugIn only) is not watched."""
+        import subprocess as sp
+
+        class QuietTouch(FakeTouch):
+            def __init__(self):
+                r, _w = os.pipe()               # no tap ever arrives
+                self.fds = [r]
+                self.paths = ["fake"]
+                self._keep = _w
+
+        started = []
+
+        class FakeProc(object):
+            def __init__(self, args, **kw):
+                started.append(args)
+                r, w = os.pipe()
+                if args[1] == "com.lab126.hal":
+                    os.write(w, b"usbConfigured\n")     # the event arrives
+                self.stdout = os.fdopen(r, "rb")
+                self._w = w
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                os.close(self._w)
+
+        sys.modules["touch"] = types.SimpleNamespace(Touch=QuietTouch)
+        real_popen = self.main.subprocess.Popen
+        self.main.subprocess.Popen = FakeProc
+        try:
+            with self.assertLogs("reading-stats", level="INFO") as logs:
+                self.main.run()
+        finally:
+            self.main.subprocess.Popen = real_popen
+        self.assertTrue(FakeDisplay.unmapped)
+        self.assertTrue(any("closed: USB connected" in m for m in logs.output), logs.output)
+        watched = {(a[1], a[2]) for a in started}
+        self.assertIn(("com.lab126.hal", "usbConfigured"), watched)
+        self.assertNotIn("usbPlugIn", " ".join(a[2] for a in started))
+
     def test_saved_card_corners_use_the_library_as_it_is_now(self):
         self.main.run()
         w, h, x, y = FakeScreen.instances[-1].shows[0]

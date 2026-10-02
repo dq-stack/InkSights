@@ -187,6 +187,32 @@ def fresh_card(region_w, region_h, background, scale):
     return bg, h, card.see_through_runs(c, scale)
 
 
+# System events that close the card. Found with a probe on a PW2 (FW 5.12):
+# plugging into a computer sends hal usbPlugIn, volumd userstoreIsLikelyToUnMount
+# and hal usbConfigured, then volumd userstoreUnAvailable as USB drive mode
+# starts. usbPlugIn alone also fires for a wall charger, which shouldn't close it.
+CLOSE_EVENTS = (
+    ("com.lab126.powerd", "goingToScreenSaver", "going to sleep"),
+    ("com.lab126.hal", "usbConfigured", "USB connected"),
+    ("com.lab126.volumd", "userstoreIsLikelyToUnMount,userstoreUnAvailable", "USB drive mode"),
+)
+
+
+def start_watchers():
+    """{readable pipe: (reason, process)}, one lipc-wait-event per publisher;
+    each exits (making its pipe readable) on the first matching event."""
+    watchers = {}
+    for publisher, events, reason in CLOSE_EVENTS:
+        try:
+            proc = subprocess.Popen(["lipc-wait-event", publisher, events],
+                                    stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        except OSError as e:
+            log.warning("can't watch %s: %s", publisher, e)
+            continue
+        watchers[proc.stdout] = (reason, proc)
+    return watchers
+
+
 def card_region(scr, top, scale):
     """(x, y, w, h) of the area the card (plus shadow) may cover."""
     card_w = int(round(CARD_W * scale))
@@ -247,12 +273,7 @@ def run():
         log.error("no shield, card may be painted over: %s", e)
 
     tch = touch_mod.Touch()
-    sleep_watch = None
-    try:
-        sleep_watch = subprocess.Popen(["lipc-wait-event", "com.lab126.powerd", "goingToScreenSaver"],
-                                       stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
-    except OSError as e:
-        log.warning("no sleep watcher: %s", e)
+    watchers = start_watchers()
 
     try:
         if valid:
@@ -291,7 +312,7 @@ def run():
         checked = False
         t_check = time.time() + RECHECK_AFTER
         deadline = T_START + BACKSTOP_SECS
-        fds = list(tch.fds) + ([sleep_watch.stdout] if sleep_watch else [])
+        fds = list(tch.fds) + list(watchers)
         while True:
             now = time.time()
             if now >= deadline:
@@ -309,8 +330,9 @@ def run():
                         log.info("card was painted over; redrawn")
                     checked = True
                 continue
-            if sleep_watch and sleep_watch.stdout in ready:
-                log.info("closed: going to sleep")
+            fired = [watchers[f][0] for f in ready if f in watchers]
+            if fired:
+                log.info("closed: %s", fired[0])
                 break
             tap = None
             for fd in ready:
@@ -329,8 +351,9 @@ def run():
                 log.warning("unmap failed: %s", e)
             xd.close()
         tch.close()
-        if sleep_watch and sleep_watch.poll() is None:
-            sleep_watch.terminate()
+        for _reason, proc in watchers.values():
+            if proc.poll() is None:
+                proc.terminate()
         scr.close()
 
 
