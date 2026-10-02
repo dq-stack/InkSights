@@ -79,24 +79,27 @@ streaks and totals carry on from where they were.
 opening the book. This is only safe if the book file itself hasn't changed
 (a re-converted book may not line up).
 
-### Optional: automatic backups on a Mac
+### Automatic backups with calibre
 
-`extras/macos-auto-backup/` backs up the Kindle every time it's plugged into
-your Mac: `reading-stats/` plus every book's sidecar folder, into
-`~/Documents/Kindle Backups/<date>/`, keeping the newest 30. It only reads
-from the Kindle.
+If you manage your books with [calibre](https://calibre-ebook.com) (6.18 or
+newer), the **Kindle Reading Backup** plugin backs up your reading data every
+time the Kindle connects:
 
-```
-sh extras/macos-auto-backup/install.sh      # set up (no admin rights needed)
-sh extras/macos-auto-backup/uninstall.sh    # remove (keeps your backups)
-```
+- each book's reading data (position, highlights, reading timer) is saved in
+  that book's **data files** in your calibre library (right-click a book >
+  Manage data files > `kindle-reading/`), so it moves with the book and is
+  included in any backup of your library;
+- the Reading Stats log is copied to calibre's settings folder
+  (`plugins/Kindle Reading Backup/reading-stats/<date>/`), newest 30 kept.
 
-Log: `~/Library/Logs/kindle-backup.log`. macOS doesn't let background jobs
-read USB drives, so the installer wraps the script in a tiny invisible app,
-"Kindle Backup". The first time it runs, macOS may ask whether it can access
-files on a removable volume: click Allow. (If it doesn't ask and the log says
-it can't read the Kindle, allow it under System Settings > Privacy & Security
-> Files and Folders.)
+It only reads from the Kindle. Install `kindle-reading-backup.zip` from the
+release: calibre > Preferences > Plugins > Load plugin from file. Runs by
+itself; there's also a **Kindle Reading Backup** button (add it under
+Preferences > Toolbars & menus) to run it on demand.
+
+To restore a book's reading data, open its data files in calibre and copy the
+files from `kindle-reading/` into that book's `.sdr` folder on the Kindle
+(same caveat as above: only if the book file hasn't changed).
 
 ## Licence and credits
 
