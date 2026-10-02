@@ -24,6 +24,7 @@ class BackupAction(InterfaceAction):
     def genesis(self):
         self._running = False
         self._last = None
+        self.qaction.setIcon(get_icons("images/icon.png", "Kindle Reading Backup"))  # noqa: F821 (calibre builtin)
         self.qaction.triggered.connect(self.backup_now)
         self.done = FunctionDispatcher(self._done)
         device_signals.device_metadata_available.connect(self.backup_auto)
