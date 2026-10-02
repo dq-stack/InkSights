@@ -11,6 +11,6 @@ class ReadingStatsBackupPlugin(InterfaceActionBase):
                    "Only reads from the Kindle.")
     supported_platforms = ["windows", "osx", "linux"]
     author = "dq-stack"
-    version = (1, 0, 0)
+    version = (1, 0, 1)
     minimum_calibre_version = (6, 18, 0)     # per-book data files
     actual_plugin = "calibre_plugins.inksights_backup.action:BackupAction"
