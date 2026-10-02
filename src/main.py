@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Reading Stats: show the Reading Insights card over the Kindle Library.
+"""InkSights: show the Reading Insights card over the Kindle Library.
 
-Launched by the "Reading Stats" scriptlet. Flow:
+Launched by the "InkSights" scriptlet. Flow:
   1. cover the Library area (below the menu bar) with an invisible X window,
      so the Library can't paint over the card and taps can't open books;
   2. show the card saved last time straight away (no Pillow needed, so it's
@@ -36,7 +36,10 @@ if sys.flags.no_site:
     if os.path.isdir(_site):
         sys.path.append(_site)
 
-DATA_DIR = "/mnt/us/reading-stats"
+# INKSIGHTS_DATA_DIR / INKSIGHTS_DEMO let the README's demo card be drawn on a
+# real Kindle from a made-up log, without touching the user's own data.
+DATA_DIR = os.environ.get("INKSIGHTS_DATA_DIR", "/mnt/us/reading-stats")
+DEMO = bool(os.environ.get("INKSIGHTS_DEMO"))
 DOCUMENTS = "/mnt/us/documents"
 LOG = os.path.join(DATA_DIR, "stats.log")
 SNAPSHOTS = os.path.join(DATA_DIR, "snapshots.jsonl")
@@ -171,7 +174,7 @@ def fresh_card(region_w, region_h, background, scale):
     log.info("imports: %s", ", ".join(marks))
 
     t = time.time()
-    books = collect.collect(DOCUMENTS, CCDB)
+    books = [] if DEMO else collect.collect(DOCUMENTS, CCDB)
     for b in books:
         for e in b["errors"]:
             log.warning("sidecar %s: %s", b["key"], e)
@@ -279,6 +282,8 @@ def run():
 
             # 5. Reading data changed, so refresh the sidecar backups (card's already up).
             try:
+                if DEMO:
+                    raise RuntimeError("demo mode: no backup")
                 import backup
                 t_b = time.time()
                 n = backup.mirror_sidecars(DOCUMENTS, SIDECAR_BACKUP)

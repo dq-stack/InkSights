@@ -1,13 +1,13 @@
 #!/bin/sh
-# Name: Reading Stats
-# Icon: /mnt/us/extensions/reading-stats/icon.png
+# Name: InkSights
+# Icon: /mnt/us/extensions/inksights/icon.png
 # DontUseFBInk
 
-APP="/mnt/us/extensions/reading-stats"
+APP="/mnt/us/extensions/inksights"
 PY="/mnt/us/python3/bin/python3.9"
 
 if [ ! -x "$PY" ]; then
-    eips 2 30 "Reading Stats needs Python 3 in /mnt/us/python3"
+    eips 2 30 "InkSights needs Python 3 in /mnt/us/python3"
     exit 1
 fi
 

@@ -1,7 +1,7 @@
-# Reading Stats
+# InkSights
 
 A Steam-style reading stats card for jailbroken Kindles, for books read in
-the stock Kindle reader. Tap **Reading Stats** in your Library and a card
+the stock Kindle reader. Tap **InkSights** in your Library and a card
 pops up over it:
 
 - **Today**, your **streak** (days with 5+ minutes) and **total** reading time
@@ -28,8 +28,8 @@ Kindle system files are only ever **read**, never changed.
 Copy onto the Kindle over USB:
 
 ```
-extensions/reading-stats/        (from src/ + packaging/extension/icon.png)
-documents/Reading Stats.sh       (from packaging/documents/)
+extensions/inksights/            (from src/ + packaging/extension/icon.png)
+documents/InkSights.sh           (from packaging/documents/)
 ```
 
 `tools/deploy.sh` does this from a checkout on a Mac or Linux machine.
@@ -43,7 +43,7 @@ difference, split across days using the book's page-turn timestamps where
 there are any. Streaks, the heatmap and the month chart come from that log
 (`reading-stats/snapshots.jsonl`), so:
 
-- history starts when you first open Reading Stats (time read before then
+- history starts when you first open InkSights (time read before then
   counts toward totals but isn't dated, unless the Kindle kept page-turn
   times for it);
 - re-sending a book from Calibre can reset its sidecar, but the hours already
@@ -55,7 +55,7 @@ when nothing it was made from has changed.
 
 ## Backing up
 
-Everything Reading Stats knows lives in **one folder on the Kindle:
+Everything InkSights knows lives in **one folder on the Kindle:
 `reading-stats/`** (visible over USB):
 
 | | |
@@ -70,7 +70,7 @@ put back.
 
 **To back up:** copy the `reading-stats` folder to your computer now and then.
 
-**After a factory reset or wipe:** reinstall Reading Stats, then copy your
+**After a factory reset or wipe:** reinstall InkSights, then copy your
 backed-up `reading-stats` folder back to the root of the Kindle. Your log,
 streaks and totals carry on from where they were.
 
@@ -82,19 +82,19 @@ opening the book. This is only safe if the book file itself hasn't changed
 ### Automatic backups with calibre
 
 If you manage your books with [calibre](https://calibre-ebook.com) (6.18 or
-newer), the **Kindle Reading Backup** plugin backs up your reading data every
+newer), the **InkSights Backup** plugin backs up your reading data every
 time the Kindle connects:
 
 - each book's reading data (position, highlights, reading timer) is saved in
   that book's **data files** in your calibre library (right-click a book >
   Manage data files > `kindle-reading/`), so it moves with the book and is
   included in any backup of your library;
-- the Reading Stats log is copied to calibre's settings folder
-  (`plugins/Kindle Reading Backup/reading-stats/<date>/`), newest 30 kept.
+- the InkSights log is copied to calibre's settings folder
+  (`plugins/InkSights Backup/reading-stats/<date>/`), newest 30 kept.
 
-It only reads from the Kindle. Install `kindle-reading-backup.zip` from the
+It only reads from the Kindle. Install `inksights-backup-calibre.zip` from the
 release: calibre > Preferences > Plugins > Load plugin from file. Runs by
-itself; there's also a **Kindle Reading Backup** button (add it under
+itself; there's also a **InkSights Backup** button (add it under
 Preferences > Toolbars & menus) to run it on demand.
 
 To restore a book's reading data, open its data files in calibre and copy the

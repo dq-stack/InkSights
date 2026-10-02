@@ -9,14 +9,14 @@ from calibre.gui2.actions import InterfaceAction
 from calibre.gui2.device import device_signals
 from calibre.utils.config import config_dir
 
-from calibre_plugins.reading_stats_backup import core
+from calibre_plugins.inksights_backup import core
 
-LOG_BACKUPS = os.path.join(config_dir, "plugins", "Kindle Reading Backup", "reading-stats")
+LOG_BACKUPS = os.path.join(config_dir, "plugins", "InkSights Backup", "reading-stats")
 
 
 class BackupAction(InterfaceAction):
-    name = "Kindle Reading Backup"
-    action_spec = ("Kindle Reading Backup", None,
+    name = "InkSights Backup"
+    action_spec = ("InkSights Backup", None,
                    "Back up Kindle reading data into the library now", None)
     action_type = "current"
     dont_add_to = frozenset(["context-menu", "context-menu-device"])
@@ -24,7 +24,7 @@ class BackupAction(InterfaceAction):
     def genesis(self):
         self._running = False
         self._last = None
-        self.qaction.setIcon(get_icons("images/icon.png", "Kindle Reading Backup"))  # noqa: F821 (calibre builtin)
+        self.qaction.setIcon(get_icons("images/icon.png", "InkSights Backup"))  # noqa: F821 (calibre builtin)
         self.qaction.triggered.connect(self.backup_now)
         self.done = FunctionDispatcher(self._done)
         device_signals.device_metadata_available.connect(self.backup_auto)
@@ -36,7 +36,7 @@ class BackupAction(InterfaceAction):
 
     def backup_now(self):
         if not self.start(announce=True):
-            info_dialog(self.gui, "Kindle Reading Backup",
+            info_dialog(self.gui, "InkSights Backup",
                         "Connect your Kindle first (and wait for calibre to read its books).",
                         show=True)
 
@@ -77,18 +77,18 @@ class BackupAction(InterfaceAction):
         self._running = False
         self._last = summary
         if "crash" in summary:
-            msg = "Kindle Reading Backup failed (see calibre's debug log)"
+            msg = "InkSights Backup failed (see calibre's debug log)"
             print(summary["crash"])
         else:
-            msg = "Kindle Reading Backup: %d file(s) from %d book(s) saved, %d unchanged" % (
+            msg = "InkSights Backup: %d file(s) from %d book(s) saved, %d unchanged" % (
                 summary["files"], summary["books"], summary["unchanged"])
             if summary["unmatched"]:
                 msg += ", %d Kindle book(s) not in this library" % summary["unmatched"]
             for e in summary["errors"]:
-                print("Kindle Reading Backup:", e)
+                print("InkSights Backup:", e)
         self.gui.status_bar.show_message(msg, 8000)
         if announce:
             details = msg
             if summary.get("log_copy"):
-                details += "\n\nReading Stats log copied to:\n" + summary["log_copy"]
-            info_dialog(self.gui, "Kindle Reading Backup", details, show=True)
+                details += "\n\nInkSights reading log copied to:\n" + summary["log_copy"]
+            info_dialog(self.gui, "InkSights Backup", details, show=True)

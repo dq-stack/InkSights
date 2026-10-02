@@ -74,7 +74,7 @@ def backup_books(db, prefix, books):
 
 
 def backup_stats_log(prefix, dest_root, today=None):
-    """Dated copy of the Reading Stats app's folder (its reading log and its
+    """Dated copy of the InkSights app's data folder (its reading log and its
     own sidecar copies), newest KEEP_LOG_COPIES kept. Returns the copy's path
     or None if the Kindle doesn't have the app."""
     src = os.path.join(prefix, "reading-stats")

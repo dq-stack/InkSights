@@ -5,11 +5,13 @@ set -eu
 ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 K="${KINDLE:-/Volumes/Kindle}"
 [ -d "$K/documents" ] || { echo "Kindle not mounted at $K" >&2; exit 1; }
-APP="$K/extensions/reading-stats"
+APP="$K/extensions/inksights"
+# earlier builds were called Reading Stats
+rm -rf "$K/extensions/reading-stats" "$K/documents/Reading Stats.sh"
 mkdir -p "$APP"
 rm -rf "$APP/__pycache__" "$APP"/*.py
 cp "$ROOT"/src/*.py "$ROOT/packaging/extension/icon.png" "$ROOT/LICENSE" "$APP/"
-cp "$ROOT/packaging/documents/Reading Stats.sh" "$K/documents/Reading Stats.sh"
+cp "$ROOT/packaging/documents/InkSights.sh" "$K/documents/InkSights.sh"
 rm -f "$K/reading-stats/card.cache"      # drawn by the previous build
 dot_clean -m "$APP" "$K/documents" 2>/dev/null || true
 sync
