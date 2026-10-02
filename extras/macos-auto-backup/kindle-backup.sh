@@ -19,6 +19,11 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
 sleep 5
 [ -d "$KINDLE/documents" ] || exit 0
 
+if ! ls "$KINDLE/documents" >/dev/null 2>&1; then
+    log "can't read $KINDLE: allow \"Kindle Backup\" in System Settings > Privacy & Security > Files and Folders (Removable Volumes)"
+    exit 1
+fi
+
 DEST="$DEST_ROOT/$(date +%Y-%m-%d)"
 mkdir -p "$DEST" || { log "cannot create $DEST"; exit 1; }
 

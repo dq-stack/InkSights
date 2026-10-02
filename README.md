@@ -91,7 +91,12 @@ sh extras/macos-auto-backup/install.sh      # set up (no admin rights needed)
 sh extras/macos-auto-backup/uninstall.sh    # remove (keeps your backups)
 ```
 
-Log: `~/Library/Logs/kindle-backup.log`.
+Log: `~/Library/Logs/kindle-backup.log`. macOS doesn't let background jobs
+read USB drives, so the installer wraps the script in a tiny invisible app,
+"Kindle Backup". The first time it runs, macOS may ask whether it can access
+files on a removable volume: click Allow. (If it doesn't ask and the log says
+it can't read the Kindle, allow it under System Settings > Privacy & Security
+> Files and Folders.)
 
 ## Licence and credits
 
