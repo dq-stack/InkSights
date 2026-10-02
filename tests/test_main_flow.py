@@ -87,6 +87,8 @@ class MainFlowTests(unittest.TestCase):
         main.DOCUMENTS = self.docs
         main.SNAPSHOTS = os.path.join(self.tmp, "snapshots.jsonl")
         main.CARD_CACHE = os.path.join(self.tmp, "card.cache")
+        self.saved_backup = main.SIDECAR_BACKUP
+        main.SIDECAR_BACKUP = os.path.join(self.tmp, "sidecars")
         main.LOCK = os.path.join(self.tmp, "lock")
         main.CCDB = os.path.join(self.docs, "cc.db")
         sup = "/System/Library/Fonts/Supplemental/"

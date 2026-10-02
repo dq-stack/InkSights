@@ -41,6 +41,7 @@ DOCUMENTS = "/mnt/us/documents"
 LOG = os.path.join(DATA_DIR, "stats.log")
 SNAPSHOTS = os.path.join(DATA_DIR, "snapshots.jsonl")
 CARD_CACHE = os.path.join(DATA_DIR, "card.cache")
+SIDECAR_BACKUP = os.path.join(DATA_DIR, "sidecars")
 LOCK = "/tmp/reading-stats.lock"
 CCDB = "/var/local/cc.db"
 
@@ -275,6 +276,15 @@ def run():
                     save_top, save_h = real_top, real_h
             # fingerprint AFTER computing: logging this launch's reading changes the inputs
             save_cache(x, y, region_w, card_h, save_top, save_h, current_fingerprint(), runs, data)
+
+            # 5. Reading data changed, so refresh the sidecar backups (card's already up).
+            try:
+                import backup
+                t_b = time.time()
+                n = backup.mirror_sidecars(DOCUMENTS, SIDECAR_BACKUP)
+                log.info("backed up %d sidecar file(s) in %.2fs", n, time.time() - t_b)
+            except Exception as e:
+                log.warning("sidecar backup failed: %s", e)
 
         drawn = scr.grab(x, y, region_w, draw_h)   # as stored, for the later check
 
