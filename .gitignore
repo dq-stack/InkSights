@@ -1,0 +1,5 @@
+# Dan's own library copy (sidecars, cc.db, screenshots, touch recording): personal data
+sample/
+__pycache__/
+*.pyc
+.DS_Store
