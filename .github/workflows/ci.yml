@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  test-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"   # the Kindle runs NiLuJe's Python 3.9
+      - run: pip install pillow
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Build downloads
+        run: sh tools/package.sh "${GITHUB_REF_NAME#v}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: inksights
+          path: release/*.zip
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/*.zip \
+            --title "InkSights $GITHUB_REF_NAME" \
+            --notes-file ".github/release-notes/$GITHUB_REF_NAME.md"

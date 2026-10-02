@@ -9,6 +9,13 @@ pops up over it:
 - **Most read** books with time spent and progress
 - A **26-week heatmap** of your reading days
 
+<p align="center">
+  <img src="docs/card-real.png" width="380" alt="InkSights card over the Kindle Library, after two days of use">
+  &nbsp;
+  <img src="docs/card-demo.png" width="380" alt="InkSights card with six months of (demo) reading">
+</p>
+<p align="center"><sub>Left: two days in. Right: six months of demo data. (Previews; on the Kindle the card uses its Amazon Ember font.)</sub></p>
+
 Tap anywhere to close it. The menu bar stays live, so Home, Settings and
 Search work (and close the card). Putting the Kindle to sleep closes it too.
 
@@ -17,22 +24,38 @@ Kindle system files are only ever **read**, never changed.
 
 ## Requirements
 
-- A jailbroken Kindle with Scriptlet support (`.sh` files in `documents`
-  show up in the Library). Developed and tested on a Paperwhite 2
-  (FW 5.12.2.2).
-- NiLuJe's Python 3 package in `/mnt/us/python3`. It's normally installed
-  with MRPI; it can also be unpacked by hand (see below).
+- A **jailbroken Kindle with Scriptlet support** (`.sh` files in `documents`
+  show up in the Library). Developed and tested on a Paperwhite 2,
+  FW 5.12.2.2; other models should work but are untested.
+- **NiLuJe's Python 3** in `/mnt/us/python3` (the next section covers it).
+- Books read in the **stock Kindle reader** (KOReader keeps its own stats).
 
 ## Install
 
-Copy onto the Kindle over USB:
+### 1. Python 3 (once)
 
-```
-extensions/inksights/            (from src/ + packaging/extension/icon.png)
-documents/InkSights.sh           (from packaging/documents/)
-```
+If you use KUAL + MRPI, install NiLuJe's Python package the usual way.
+Otherwise, no installer needed:
 
-`tools/deploy.sh` does this from a checkout on a Mac or Linux machine.
+1. Download `kindle-python-*.tar.xz` from NiLuJe's
+   [Snapshots thread](https://www.mobileread.com/forums/showthread.php?t=225030).
+2. On your computer: `python3 tools/extract-kindle-python.py kindle-python-*.tar.xz`
+   (add `--touch` for a Kindle Touch / Paperwhite 1).
+3. Copy the `python3` folder it creates to the root of the Kindle's USB drive.
+
+### 2. InkSights
+
+Unzip `inksights-<version>.zip` from the
+[latest release](../../releases/latest) and copy its `extensions` and
+`documents` folders onto the Kindle's USB drive (merge with what's there).
+Eject, and **InkSights** appears in your Library.
+
+The first launch takes a few seconds longer while Python warms up.
+
+### Uninstall
+
+Delete `documents/InkSights.sh` and `extensions/inksights/`. Your reading log
+is in `reading-stats/`: keep it if you might come back.
 
 ## How the numbers work
 
@@ -92,7 +115,7 @@ time the Kindle connects:
 - the InkSights log is copied to calibre's settings folder
   (`plugins/InkSights Backup/reading-stats/<date>/`), newest 30 kept.
 
-It only reads from the Kindle. Install `inksights-backup-calibre.zip` from the
+It only reads from the Kindle. Install `inksights-backup-calibre-<version>.zip` from the
 release: calibre > Preferences > Plugins > Load plugin from file. Runs by
 itself; there's also a **InkSights Backup** button (add it under
 Preferences > Toolbars & menus) to run it on demand.
@@ -100,6 +123,16 @@ Preferences > Toolbars & menus) to run it on demand.
 To restore a book's reading data, open its data files in calibre and copy the
 files from `kindle-reading/` into that book's `.sdr` folder on the Kindle
 (same caveat as above: only if the book file hasn't changed).
+
+## Development
+
+- `src/`: the Kindle app (`main.py` entry point); `calibre-plugin/`: the plugin
+- `python3 -m unittest discover -s tests` runs the tests (some use a local
+  `sample/` copy of a Kindle's documents folder and skip without it);
+  `calibre-debug -e tests/calibre_core_check.py` tests the plugin core
+- `tools/mockup.py` renders the card on a Mac; `tools/deploy.sh` copies the
+  checkout onto a USB-mounted Kindle; `tools/package.sh <version>` builds the
+  release downloads (CI does this when a `v*` tag is pushed)
 
 ## Licence and credits
 
