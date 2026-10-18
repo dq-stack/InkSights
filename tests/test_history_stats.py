@@ -101,5 +101,23 @@ class StatsTests(unittest.TestCase):
         self.assertEqual(s["finished"], 1)
 
 
+
+class CurrentProgressTests(unittest.TestCase):
+    def test_mark_as_read_reaches_the_card_without_new_reading(self):
+        """The log's last row says 73%; the library now says finished."""
+        rows = [{"ts": "2026-10-14T02:07:00", "key": "Badawi/African.sdr", "title": "An African History of Africa",
+                 "total_ms": 3600000, "percent": 0.7251717, "words": 1000, "gained_ms": 3600000,
+                 "alloc": {"2026-10-14": 3600000}}]
+        current = [{"key": "Badawi/African.sdr", "title": "An African History of Africa", "percent": 1.0}]
+        before = stats.compute(rows, date(2026, 10, 18))
+        after = stats.compute(rows, date(2026, 10, 18), current=current)
+        self.assertAlmostEqual(before["top"][0]["percent"], 0.7251717)
+        self.assertEqual(after["top"][0]["percent"], 1.0)
+        self.assertEqual(after["finished"], before["finished"] + 1)
+
+    def test_books_not_in_the_log_are_not_added(self):
+        current = [{"key": "x.sdr", "title": "Never opened", "percent": 0.5}]
+        self.assertEqual(stats.compute([], date(2026, 10, 18), current=current)["books"], 0)
+
 if __name__ == "__main__":
     unittest.main()

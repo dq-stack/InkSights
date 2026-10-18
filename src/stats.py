@@ -70,7 +70,10 @@ def heatmap(days, today, weeks=HEATMAP_WEEKS):
     return grid
 
 
-def compute(rows, today=None):
+def compute(rows, today=None, current=None):
+    """Stats from the reading log. current: this launch's collected books;
+    their progress wins over the log's, which only gains a row when reading
+    time goes up (so "Mark as Read" alone would never reach the card)."""
     today = today or date.today()
     days = per_day(rows)
     year = str(today.year)
@@ -86,8 +89,15 @@ def compute(rows, today=None):
         # latest timer totals per sidecar give pace; keep per title
         b.setdefault("_latest", {})[r["key"]] = (r.get("words") or 0, r.get("total_ms") or 0)
 
+    for c in current or ():
+        if c.get("percent") is not None and c.get("title") in books:
+            b = books[c["title"]]
+            b["percent"] = max(c["percent"], b["_now"]) if "_now" in b else c["percent"]
+            b["_now"] = b["percent"]
+
     words = timer_ms = 0
     for b in books.values():
+        b.pop("_now", None)
         for w, t in b.pop("_latest").values():
             words += w
             timer_ms += t

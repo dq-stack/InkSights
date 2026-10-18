@@ -176,7 +176,7 @@ def fresh_card(region_w, region_h, background, scale):
         for e in b["errors"]:
             log.warning("sidecar %s: %s", b["key"], e)
     rows = history.record(SNAPSHOTS, books)
-    s = stats.compute(rows, date.today())
+    s = stats.compute(rows, date.today(), current=books)
     log.info("collected %d books, %d log rows in %.2fs", len(books), len(rows), time.time() - t)
 
     font = card.Fonts(*card.KINDLE_FONTS, scale=scale)
