@@ -3,6 +3,7 @@
 Only ever reads from the Kindle.
 """
 
+import json
 import os
 import shutil
 import time
@@ -10,6 +11,11 @@ import time
 SIDECAR_EXTS = (".azw3f", ".yjf", ".mbs", ".azw3r", ".yjr", ".mbp1")
 DATA_SUBDIR = "data/kindle-reading"      # inside each book's folder in the library
 KEEP_LOG_COPIES = 30
+LOG_SKIP = ("card.cache",)                 # rebuilt by the app; not worth keeping
+
+
+class OldWirelessClient(Exception):
+    """The Calibre Wireless app on the Kindle can't list folders yet."""
 
 
 def sidecar_dir(prefix, lpath):
@@ -83,8 +89,41 @@ def backup_stats_log(prefix, dest_root, today=None):
     dest = os.path.join(dest_root, today or time.strftime("%Y-%m-%d"))
     if os.path.isdir(dest):
         shutil.rmtree(dest)
-    shutil.copytree(src, dest, ignore=shutil.ignore_patterns("._*", "card.cache", "*.tmp"))
+    shutil.copytree(src, dest, ignore=shutil.ignore_patterns("._*", "*.tmp", *LOG_SKIP))
     dated = sorted(d for d in os.listdir(dest_root) if len(d) == 10 and d[4] == "-" and d[7] == "-")
     for old in dated[:-KEEP_LOG_COPIES]:
         shutil.rmtree(os.path.join(dest_root, old), ignore_errors=True)
     return dest
+
+
+def mirror_over_wifi(get, lpaths, dest):
+    """Copy what the backup needs from a Kindle connected through the Calibre
+    Wireless app into dest, laid out like the Kindle itself, so the USB code
+    above can run on dest as the prefix.
+
+    get(lpath) returns a file's bytes (b"" if missing); an lpath ending in "/"
+    returns a JSON list of {"path", "size"} for that folder (Calibre Wireless
+    1.1.0+; older versions return b"")."""
+    def listing(folder):
+        raw = get(folder + "/")
+        if not raw:
+            raise OldWirelessClient(folder)
+        return json.loads(raw.decode("utf-8"))
+
+    def fetch(lpath):
+        target = os.path.join(dest, *lpath.split("/"))
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        with open(target, "wb") as f:
+            f.write(get(lpath))
+
+    for entry in listing("reading-stats"):
+        name = entry["path"].rsplit("/", 1)[-1]
+        if name in LOG_SKIP or name.startswith("._") or name.endswith(".tmp"):
+            continue
+        fetch("reading-stats/" + entry["path"])
+    for lpath in lpaths:
+        sdr = os.path.splitext(lpath)[0] + ".sdr"
+        for entry in listing(sdr):
+            name = entry["path"]
+            if "/" not in name and name.lower().endswith(SIDECAR_EXTS):
+                fetch(sdr + "/" + name)

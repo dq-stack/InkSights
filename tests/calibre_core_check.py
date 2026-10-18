@@ -1,5 +1,6 @@
 """Run with: calibre-debug -e tests/calibre_core_check.py
 Exercises the Calibre plugin's core against a throwaway calibre library."""
+import json
 import os
 import shutil
 import sys
@@ -56,6 +57,34 @@ try:
     path = [ef.file_path for ef in db.list_extra_files(book_id) if ef.relpath.endswith("azw3f")][0]
     assert open(path, "rb").read() == b"timer, read more"
     print("changed file re-copied: ok")
+
+    def fake_wifi(lpath):    # what Calibre Wireless 1.1.0 serves
+        real = os.path.join(kindle, *lpath.rstrip("/").split("/"))
+        if lpath.endswith("/"):
+            out = []
+            for d, _, names in os.walk(real):
+                for n in sorted(names):
+                    p = os.path.join(d, n)
+                    out.append({"path": os.path.relpath(p, real).replace(os.sep, "/"),
+                                "size": os.path.getsize(p)})
+            return json.dumps(sorted(out, key=lambda e: e["path"])).encode()
+        return open(real, "rb").read() if os.path.isfile(real) else b""
+
+    wifi = os.path.join(tmp, "wifi")
+    core.mirror_over_wifi(fake_wifi, [b[0] for b in books], wifi)
+    assert open(os.path.join(wifi, "documents", "Voss, Chris", "Never Split - Chris Voss.sdr", "x.azw3f"),
+                "rb").read() == b"timer, read more"
+    assert not os.path.exists(os.path.join(wifi, "documents", "Voss, Chris", "Never Split - Chris Voss.sdr", "x.apnx"))
+    assert os.path.exists(os.path.join(wifi, "reading-stats", "snapshots.jsonl"))
+    assert not os.path.exists(os.path.join(wifi, "reading-stats", "card.cache"))
+    s4 = core.backup_books(db, wifi + os.sep, books)
+    assert (s4["files"], s4["unchanged"], s4["unmatched"], s4["no_data"]) == (0, 2, 1, 1), s4
+    try:
+        core.mirror_over_wifi(lambda lp: b"" if lp.endswith("/") else fake_wifi(lp), [], tmp)
+        raise AssertionError("old client not detected")
+    except core.OldWirelessClient:
+        pass
+    print("wifi mirror: ok")
 
     logs = os.path.join(tmp, "logs")
     os.makedirs(logs)
