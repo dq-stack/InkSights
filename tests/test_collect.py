@@ -34,6 +34,37 @@ class LibraryTests(unittest.TestCase):
         self.assertIsNone(lib["Book_B00X.sdr"]["percent"])
         self.assertNotIn("dict.sdr", lib)
 
+    def test_marked_as_read_counts_as_finished(self):
+        """FW 5.12 "Mark as Read" sets p_readState = 1 and leaves the percent."""
+        path = os.path.join(tempfile.mkdtemp(), "cc.db")
+        con = sqlite3.connect(path)
+        con.execute("CREATE TABLE Entries (p_type, p_location, p_titles_0_nominal, "
+                    "p_credits_0_name_collation, p_percentFinished, p_readState)")
+        con.executemany("INSERT INTO Entries VALUES (?,?,?,?,?,?)", [
+            ("Entry:Item", "/mnt/us/documents/A/African History - X.azw3",
+             "An African History of Africa", "X", 73.1, 1),
+            ("Entry:Item", "/mnt/us/documents/B/Unread - Y.azw3", "Unread", "Y", 12.0, None),
+        ])
+        con.commit()
+        con.close()
+        lib = collect.library(path)
+        self.assertEqual(lib["A/African History - X.sdr"]["percent"], 1.0)
+        self.assertAlmostEqual(lib["B/Unread - Y.sdr"]["percent"], 0.12)
+
+    def test_marking_as_read_changes_the_fingerprint(self):
+        import fingerprint
+        path = os.path.join(tempfile.mkdtemp(), "cc.db")
+        con = sqlite3.connect(path)
+        con.execute("CREATE TABLE Entries (p_type, p_location, p_titles_0_nominal, "
+                    "p_percentFinished, p_readState)")
+        con.execute("INSERT INTO Entries VALUES ('Entry:Item', '/mnt/us/documents/a.azw3', 'A', 73.1, NULL)")
+        con.commit()
+        before = fingerprint.library_rows(path)
+        con.execute("UPDATE Entries SET p_readState = 1")
+        con.commit()
+        con.close()
+        self.assertNotEqual(before, fingerprint.library_rows(path))
+
     def test_missing_ccdb_is_not_an_error(self):
         self.assertEqual(collect.library("/nonexistent/cc.db"), {})
         self.assertEqual(collect.library(None), {})

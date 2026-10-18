@@ -40,12 +40,15 @@ def _stat_line(path, rel):
 
 
 def library_rows(ccdb_path):
-    """(location, title, percent) for documents, as the card would read them."""
+    """(location, title, percent, read state) for documents, as the card would
+    read them. The read state matters: "Mark as Read" changes only that."""
     con = sqlite3.connect("file:%s?mode=ro" % ccdb_path, uri=True)
     try:
+        cols = [row[1] for row in con.execute("PRAGMA table_info(Entries)")]
+        read_state = "p_readState" if "p_readState" in cols else "''"
         return con.execute(
-            "SELECT p_location, p_titles_0_nominal, p_percentFinished FROM Entries "
-            "WHERE p_type = 'Entry:Item' AND p_location LIKE ? ORDER BY p_location",
+            "SELECT p_location, p_titles_0_nominal, p_percentFinished, %s FROM Entries "
+            "WHERE p_type = 'Entry:Item' AND p_location LIKE ? ORDER BY p_location" % read_state,
             (DOCUMENTS_PREFIX + "%",)).fetchall()
     finally:
         con.close()

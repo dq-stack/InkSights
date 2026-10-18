@@ -66,10 +66,7 @@ def title_from_sdr(sdr_dir):
     return name.split("_", 1)[0].strip()
 
 
-def _ccdb_rows(path):
-    query = ("SELECT p_location, p_titles_0_nominal, p_credits_0_name_collation, "
-             "p_percentFinished FROM Entries WHERE p_type = 'Entry:Item' "
-             "AND p_location LIKE '%s%%'" % DEVICE_DOCUMENTS)
+def _query(path, query):
     try:
         con = sqlite3.connect("file:%s?mode=ro" % path, uri=True)
         try:
@@ -84,8 +81,27 @@ def _ccdb_rows(path):
         return [line.split("\x1f") for line in out.decode("utf-8").splitlines()]
 
 
+def read_state_column(path):
+    """'p_readState' if this firmware's cc.db has it (5.12 does), else None.
+    "Mark as Read" sets it to 1 but leaves p_percentFinished where you stopped."""
+    cols = [row[1] for row in _query(path, "PRAGMA table_info(Entries)")]
+    return "p_readState" if "p_readState" in cols else None
+
+
+def _ccdb_rows(path):
+    read_state = read_state_column(path)
+    query = ("SELECT p_location, p_titles_0_nominal, p_credits_0_name_collation, "
+             "p_percentFinished, %s FROM Entries WHERE p_type = 'Entry:Item' "
+             "AND p_location LIKE '%s%%'" % (
+                 "ifnull(%s, '')" % read_state if read_state else "''", DEVICE_DOCUMENTS))
+    return _query(path, query)
+
+
 def library(ccdb_path):
     """Map sidecar key (relative .sdr path) -> {title, author, percent}.
+
+    A book marked as read on the Kindle counts as 100%, whatever page you
+    stopped on.
 
     Missing or unreadable cc.db just means no titles/progress, never a crash.
     """
@@ -97,13 +113,15 @@ def library(ccdb_path):
     except Exception as e:
         log.warning("cc.db unreadable: %s", e)
         return books
-    for location, title, author, percent in rows:
+    for location, title, author, percent, read_state in rows:
         rel = location[len(DEVICE_DOCUMENTS):]
         key = os.path.splitext(rel)[0] + ".sdr"
         try:
             pct = float(percent) / 100.0 if percent not in (None, "") else None
         except ValueError:
             pct = None
+        if str(read_state).strip() == "1":     # marked as read on the Kindle
+            pct = 1.0
         books[key] = {
             "title": clean_title(title) if title else None,
             "author": author or None,
