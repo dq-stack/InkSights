@@ -115,6 +115,9 @@ time the Kindle connects:
 - the InkSights log is copied to calibre's settings folder
   (`plugins/InkSights Backup/reading-stats/<date>/`), newest 30 kept.
 
+It works with the Kindle connected by USB, or over Wi-Fi through
+[Calibre Wireless](https://github.com/dq-stack/CalibreWireless) 1.1.0 or newer.
+
 It only reads from the Kindle. Install `inksights-backup-calibre-<version>.zip` from the
 release: calibre > Preferences > Plugins > Load plugin from file. Runs by
 itself; there's also a **InkSights Backup** button (add it under
