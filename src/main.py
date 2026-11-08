@@ -43,6 +43,12 @@ SNAPSHOTS = os.path.join(DATA_DIR, "snapshots.jsonl")
 CARD_CACHE = os.path.join(DATA_DIR, "card.cache")
 SIDECAR_BACKUP = os.path.join(DATA_DIR, "sidecars")
 LOCK = "/tmp/reading-stats.lock"
+ACTIVITY_LOG = os.path.join(DATA_DIR, "activity.log")
+COVERSLEEP_LOG = "/mnt/us/extensions/custom-screensaver/custom_ss.log"
+DESK_LOG = "/mnt/us/desk/desk.log"
+RECORDER = os.path.join(HERE, "activity.sh")
+RECORDER_TMP = "/tmp/inksights-activity.sh"
+RECORDER_PID = "/tmp/inksights-activity.pid"
 CCDB = "/var/local/cc.db"
 
 BACKSTOP_SECS = 10 * 60
@@ -165,6 +171,7 @@ def fresh_card(region_w, region_h, background, scale):
     mark("card+fonts")
     import collect
     mark("collect+krds")
+    import activity
     import history
     import stats
     mark("history+stats")
@@ -175,7 +182,8 @@ def fresh_card(region_w, region_h, background, scale):
     for b in books:
         for e in b["errors"]:
             log.warning("sidecar %s: %s", b["key"], e)
-    rows = history.record(SNAPSHOTS, books)
+    rows = history.record(SNAPSHOTS, books,
+                          activity=activity.Activity(ACTIVITY_LOG, COVERSLEEP_LOG, DESK_LOG))
     s = stats.compute(rows, date.today(), current=books)
     log.info("collected %d books, %d log rows in %.2fs", len(books), len(rows), time.time() - t)
 
@@ -196,6 +204,32 @@ CLOSE_EVENTS = (
     ("com.lab126.hal", "usbConfigured", "USB connected"),
     ("com.lab126.volumd", "userstoreIsLikelyToUnMount,userstoreUnAvailable", "USB drive mode"),
 )
+
+
+def recorder_running():
+    try:
+        with open(RECORDER_PID) as f:
+            pid = int(f.read().strip())
+        with open("/proc/%d/cmdline" % pid, "rb") as f:
+            return b"inksights-activity" in f.read()
+    except (IOError, OSError, ValueError):
+        return False
+
+
+def start_recorder():
+    """Start the wake/sleep recorder (activity.sh) unless it's already running.
+    It runs from /tmp in its own session so it outlives this card, and at
+    normal priority (we run boosted)."""
+    if recorder_running() or not os.path.exists(RECORDER):
+        return
+    import shutil
+    shutil.copyfile(RECORDER, RECORDER_TMP)
+    devnull = open(os.devnull, "r+b")
+    subprocess.Popen(["/bin/sh", RECORDER_TMP], cwd="/", stdin=devnull, stdout=devnull,
+                     stderr=devnull, close_fds=True, start_new_session=True,
+                     preexec_fn=lambda: os.nice(max(0, -os.nice(0))))
+    devnull.close()
+    log.info("started wake/sleep recorder")
 
 
 def start_watchers():
@@ -363,6 +397,10 @@ def main():
         log.info("already open")
         return 0
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    try:
+        start_recorder()
+    except Exception:
+        log.exception("recorder didn't start")
     try:
         run()
     except Exception:

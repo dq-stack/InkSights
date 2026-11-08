@@ -54,15 +54,19 @@ def _parse(ts):
         return None
 
 
-def allocate(gained_ms, history, since, until, baseline):
+def allocate(gained_ms, history, since, until, baseline, weights=None):
     """Split gained time across days.
 
-    Uses the book's page.history timestamps that fall inside (since, until]
-    as weights. With none: the first-ever (baseline) reading is undated, any
-    later gain goes to the day of `until`.
+    `weights` ({day: awake seconds}, see activity.py) is used first: it says
+    when the Kindle was actually in use. Without it, the book's page.history
+    timestamps inside (since, until] are used, but those only mark jumps
+    (links, Go To), so they're a poor guide. With neither: the first-ever
+    (baseline) reading is undated, any later gain goes to the day of `until`.
     """
     days = Counter()
-    for ts in history or ():
+    if weights:
+        days.update({d: int(round(w)) for d, w in weights.items() if int(round(w)) > 0})
+    for ts in (history or ()) if not days else ():
         t = _parse(ts)
         if t is None or t > until or (since is not None and t <= since):
             continue
@@ -81,8 +85,9 @@ def allocate(gained_ms, history, since, until, baseline):
     return alloc
 
 
-def build_rows(books, rows, now):
-    """Rows to append for this launch (books with no timer data are skipped)."""
+def build_rows(books, rows, now, activity=None):
+    """Rows to append for this launch (books with no timer data are skipped).
+    `activity` (activity.Activity) supplies awake time for splitting by day."""
     prev = last_totals(rows)
     first_run = not rows
     last_ts = max((_parse(r["ts"]) for r in rows), default=None)
@@ -103,6 +108,7 @@ def build_rows(books, rows, now):
             since = _parse(p["ts"])
         if gained <= 0:
             continue
+        weights = activity.day_weights(since, now, b["key"]) if activity else None
         out.append(OrderedDict([
             ("ts", now.strftime("%Y-%m-%dT%H:%M:%S")),
             ("key", b["key"]),
@@ -111,16 +117,16 @@ def build_rows(books, rows, now):
             ("percent", b.get("percent")),
             ("words", b.get("words")),
             ("gained_ms", gained),
-            ("alloc", allocate(gained, b.get("history"), since, now, first_run and p is None)),
+            ("alloc", allocate(gained, b.get("history"), since, now, first_run and p is None, weights)),
         ]))
     return out
 
 
-def record(path, books, now=None):
+def record(path, books, now=None, activity=None):
     """Append this launch's rows to the log and return the full log."""
     now = now or datetime.now()
     rows = load(path)
-    new = build_rows(books, rows, now)
+    new = build_rows(books, rows, now, activity)
     if new:
         d = os.path.dirname(path)
         if d and not os.path.isdir(d):
@@ -131,3 +137,29 @@ def record(path, books, now=None):
             f.flush()
             os.fsync(f.fileno())
     return rows + new
+
+
+def redate(rows, activity):
+    """Re-split each row's gained time by awake time, for logs written before
+    activity.py existed. Totals and gains are untouched; only "alloc" changes,
+    and only for rows a wake/sleep log covers. Returns (rows, changed count)."""
+    out, changed = [], 0
+    prev = {}
+    for r in rows:
+        ts = _parse(r.get("ts"))
+        p = prev.get(r.get("key"))
+        earlier = [t for t in (_parse(x["ts"]) for x in out) if t is not None and ts and t < ts]
+        if p is not None and r.get("total_ms", 0) >= p.get("total_ms", 0):
+            since = _parse(p["ts"])
+        else:
+            since = max(earlier) if earlier else None      # new book / reset sidecar
+        r = OrderedDict(r)
+        weights = activity.day_weights(since, ts, r.get("key")) if ts else None
+        if weights:
+            alloc = allocate(r["gained_ms"], None, since, ts, False, weights)
+            if alloc != r.get("alloc"):
+                r["alloc"] = alloc
+                changed += 1
+        out.append(r)
+        prev[r.get("key")] = r
+    return out, changed

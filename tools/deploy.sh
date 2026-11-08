@@ -9,8 +9,8 @@ APP="$K/extensions/inksights"
 # earlier builds were called Reading Stats
 rm -rf "$K/extensions/reading-stats" "$K/documents/Reading Stats.sh"
 mkdir -p "$APP"
-rm -rf "$APP/__pycache__" "$APP"/*.py
-cp "$ROOT"/src/*.py "$ROOT/packaging/extension/icon.png" "$ROOT/LICENSE" "$APP/"
+rm -rf "$APP/__pycache__" "$APP"/*.py "$APP"/*.sh
+cp "$ROOT"/src/*.py "$ROOT"/src/*.sh "$ROOT/packaging/extension/icon.png" "$ROOT/LICENSE" "$APP/"
 # Only rewrite the Library tile when it changed: the Kindle re-indexes a
 # rewritten .sh as a new item, which drops it out of its collection.
 cmp -s "$ROOT/packaging/documents/InkSights.sh" "$K/documents/InkSights.sh" ||

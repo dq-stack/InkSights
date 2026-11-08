@@ -60,15 +60,27 @@ is in `reading-stats/`: keep it if you might come back.
 ## How the numbers work
 
 The Kindle keeps a running total of reading time per book in each book's
-sidecar folder (`<book>.sdr`), but no dates. Each time you open Reading
-Stats it compares those totals with the last ones it saw and logs the
-difference, split across days using the book's page-turn timestamps where
-there are any. Streaks, the heatmap and the month chart come from that log
-(`reading-stats/snapshots.jsonl`), so:
+sidecar folder (`<book>.sdr`), but no dates. Each time you open InkSights it
+compares those totals with the last ones it saw and logs the difference.
+Streaks, the heatmap and the month chart come from that log
+(`reading-stats/snapshots.jsonl`).
+
+To put that time on the right days, InkSights records when the Kindle wakes
+and sleeps (and which book is open when it sleeps): the screen is only on
+while you're reading, and it sleeps a few minutes after you put it down. Time
+gained between two launches is split across days by how long the screen was
+on each day. Time asleep inside a different book, and Desk Buddy sessions,
+don't count. The recorder is a tiny background script started the first
+time you open InkSights after the Kindle restarts; it writes
+`reading-stats/activity.log`. If you use
+[CoverSleep](https://github.com/dq-stack/CoverSleep), its log is used too, for
+any stretch the recorder wasn't running. With neither, the time goes on the
+day you open InkSights. So:
 
 - history starts when you first open InkSights (time read before then
-  counts toward totals but isn't dated, unless the Kindle kept page-turn
-  times for it);
+  counts toward totals but isn't dated);
+- after a restart, open InkSights once so the recorder runs (your reading
+  time is still counted either way; only the split by day needs it);
 - re-sending a book from Calibre can reset its sidecar, but the hours already
   logged are kept;
 - progress (%) is the Kindle's own figure, the same as the badge on the cover.
@@ -84,6 +96,7 @@ Everything InkSights knows lives in **one folder on the Kindle:
 | | |
 |---|---|
 | `snapshots.jsonl` | your reading log: every bit of reading time, by day and book |
+| `activity.log` | when the Kindle woke and slept, used to split reading time by day |
 | `sidecars/` | copies of each book's sidecar files (position, highlights, timer), refreshed whenever your reading data changes |
 | `stats.log` | what the app did, for troubleshooting |
 
@@ -136,6 +149,9 @@ files from `kindle-reading/` into that book's `.sdr` folder on the Kindle
 - `tools/mockup.py` renders the card on a Mac; `tools/deploy.sh` copies the
   checkout onto a USB-mounted Kindle; `tools/package.sh <version>` builds the
   release downloads (CI does this when a `v*` tag is pushed)
+- `tools/redate-history.py [--write]` re-splits an existing reading log by
+  day using a USB-mounted Kindle's wake/sleep logs (dry run without
+  `--write`; keeps a `.bak` copy)
 
 ## Licence and credits
 
