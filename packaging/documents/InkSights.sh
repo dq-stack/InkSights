@@ -4,11 +4,17 @@
 # DontUseFBInk
 
 APP="/mnt/us/extensions/inksights"
-PY="/mnt/us/python3/bin/python3.9"
+BIN="$APP/bin/inksights"
+RUN="/tmp/inksights"
 
-if [ ! -x "$PY" ]; then
-    eips 2 30 "InkSights needs Python 3 in /mnt/us/python3"
+if [ ! -f "$BIN" ]; then
+    eips 2 30 "InkSights: $BIN is missing"
     exit 1
+fi
+
+# Run a copy from /tmp: USB drive mode kills processes using files on /mnt/us.
+if [ ! -x "$RUN" ] || [ "$BIN" -nt "$RUN" ]; then
+    cp "$BIN" "$RUN.new" && chmod +x "$RUN.new" && mv "$RUN.new" "$RUN"
 fi
 
 mkdir -p /mnt/us/reading-stats
@@ -23,5 +29,5 @@ if nice -n -10 true 2>/dev/null; then
     fi
 fi
 # Return straight away so the Library isn't blocked; the card closes itself.
-RS_LAUNCHED=$(date +%s) DISPLAY=:0 $BOOST "$PY" -S "$APP/main.py" >> /mnt/us/reading-stats/launch.log 2>&1 &
+RS_LAUNCHED=$(date +%s) INKSIGHTS_DIR="$APP" DISPLAY=:0 $BOOST "$RUN" >> /mnt/us/reading-stats/launch.log 2>&1 &
 exit 0
