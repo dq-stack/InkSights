@@ -23,8 +23,9 @@ func probe() int {
 	if err != nil {
 		fmt.Println("X:", err)
 	} else {
-		top, h := libraryArea(xd, scr.Width, scr.Height)
-		fmt.Printf("library area: y=%d h=%d (X screen %dx%d)\n", top, h, xd.Width, xd.Height)
+		top, h, focus := libraryArea(xd, scr.Width, scr.Height)
+		fmt.Printf("card area: y=%d h=%d focus=%v (X screen %dx%d)\n", top, h, focus, xd.Width, xd.Height)
+		fmt.Printf("X: depth %d, pad %d, max request %d words, LSB %v, visual 0x%x\n", xd.Depth, xd.PadBits, xd.MaxRequest, xd.ImageLSB, xd.RootVisual)
 		xd.Close()
 	}
 	text, _ := os.ReadFile("/proc/bus/input/devices")

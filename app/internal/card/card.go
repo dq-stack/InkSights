@@ -417,3 +417,26 @@ func RegionWidth(scale float64) int {
 func Left(screenW int, scale float64) int {
 	return (screenW - int(math.RoundToEven(Width*scale))) / 2
 }
+
+// OnBlank places the framed card in the middle of a white w x h area (as an
+// opaque grey image, for screens where the whole area is covered).
+func OnBlank(framed *image.NRGBA, w, h int) *image.Gray {
+	out := image.NewGray(image.Rect(0, 0, w, h))
+	for i := range out.Pix {
+		out.Pix[i] = Paper
+	}
+	ox := (w - framed.Rect.Dx()) / 2
+	oy := (h - framed.Rect.Dy()) / 2
+	for y := 0; y < framed.Rect.Dy(); y++ {
+		for x := 0; x < framed.Rect.Dx(); x++ {
+			i := framed.PixOffset(x, y)
+			if framed.Pix[i+3] == 0 {
+				continue
+			}
+			if p := image.Pt(ox+x, oy+y); p.In(out.Rect) {
+				out.SetGray(p.X, p.Y, color.Gray{framed.Pix[i]})
+			}
+		}
+	}
+	return out
+}

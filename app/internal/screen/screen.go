@@ -73,12 +73,27 @@ func Open() (*Screen, error) {
 	return &Screen{FBInk: fbink, Width: fb.width, Height: fb.height, fb: fb}, nil
 }
 
+// Deferred is a screen of a known size that doesn't touch the display (no
+// FBInk run, no framebuffer opened) until the first draw. On 5.18 any
+// display activity during a scriptlet launch postpones the Kindle's launch
+// flash, so the card is prepared without touching the screen.
+func Deferred(width, height int) *Screen {
+	return &Screen{Width: width, Height: height}
+}
+
 // Show draws an image file (PNG; transparent parts blend over the screen)
 // with its top-left corner at (x, y) and refreshes that area without the
 // black flash (GL16, what the Kindle uses for ordinary page turns).
 func (s *Screen) Show(path string, x, y int) error {
-	out, err := exec.Command(s.FBInk, "-q", "-W", "GL16",
-		"-g", fmt.Sprintf("file=%s,x=%d,y=%d", path, x, y)).CombinedOutput()
+	if s.FBInk == "" {
+		p, err := FindFBInk()
+		if err != nil {
+			return err
+		}
+		s.FBInk = p
+	}
+	args := []string{"-q", "-W", "GL16", "-g", fmt.Sprintf("file=%s,x=%d,y=%d", path, x, y)}
+	out, err := exec.Command(s.FBInk, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("fbink: %v: %s", err, strings.TrimSpace(string(out)))
 	}

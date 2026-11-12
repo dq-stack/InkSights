@@ -46,7 +46,7 @@ const (
 	fallbackTop = 116             // PW2 menu bar height if the Library window isn't found
 	cardGap     = 16              // space between the menu bar and the card
 	bottomGap   = 8               // space kept free below the card
-	cacheVer    = 1
+	cacheVer    = 2
 )
 
 var (
@@ -183,6 +183,7 @@ type cache struct {
 	H       int    `json:"h"`
 	Top     int    `json:"top"`
 	LibH    int    `json:"lib_h"`
+	Focus   bool   `json:"focus"`
 	Quick   string `json:"fp_quick"`
 	Full    string `json:"fp_full"`
 }
@@ -225,39 +226,48 @@ func copyTo(src, dst string) error {
 
 // --- layout ---
 
-// libraryArea is the (top, height) of the Library's content, between its
-// top menu/search bar and any bottom bar, so those stay usable.
-func libraryArea(xd *xshield.Display, w, h int) (int, int) {
+// libraryArea returns where the card goes: (top, height) of the screen
+// area to cover, and whether to blank that area ("focus").
+//
+// Firmware up to 5.15 or so: the Library's content below its menu bar, which
+// stays usable, and the card is drawn over the Library. Newer firmware
+// (seen on 5.18): the Library app (KPPMainApp) repaints its search bar and
+// bottom bar over anything drawn there, so everything below the status bar
+// is covered and blanked, with the card in the middle.
+func libraryArea(xd *xshield.Display, w, h int) (int, int, bool) {
+	if holding {
+		return 0, h, true // the Library is paused: the whole screen is ours
+	}
 	if xd != nil {
-		// Firmware up to 5.15 or so: the Library is the home booklet. Match
-		// the application window, not the Library's "⋮" menu dialog, which
-		// shares the booklet id.
+		// Match the application window, not the Library's "⋮" menu dialog,
+		// which shares the booklet id.
 		if _, y, _, ht, ok := xd.FindWindow("N:application_ID:com.lab126.booklet.home"); ok && y > 0 {
-			return y, ht
+			return y, ht, false
 		}
-		// Newer firmware (seen on 5.18): the Library is KPPMainApp, with a
-		// search bar window over its top and a bottom bar over its foot.
-		if _, y, _, ht, ok := xd.FindWindow("N:application", "ID:com.lab126.KPPMainApp"); ok {
-			top, bottom := y, y+ht
-			if _, sy, _, sh, ok := xd.FindWindow("N:searchBar", "KPPMainApp"); ok && sy+sh > top {
-				top = sy + sh
+		if _, y, _, _, ok := xd.FindWindow("N:application", "ID:com.lab126.KPPMainApp"); ok {
+			top := y
+			if _, ty, _, th, ok := xd.FindWindow("N:titleBar"); ok && ty+th > 0 && ty+th < h/4 {
+				top = ty + th
 			}
-			if _, by, _, _, ok := xd.FindWindow("N:bottomBar", "KPPMainApp"); ok && by < bottom {
-				bottom = by
+			if top >= 0 && top < h/4 {
+				return top, h - top, true
 			}
-			if top > 0 && bottom-top > h/3 {
-				return top, bottom - top
-			}
+		}
+		// not found: note what's on screen, to support other firmware
+		for _, l := range xd.ViewableList() {
+			info("window: %s", l)
 		}
 	}
 	top := fallbackTop * w / designWidth
-	return top, h - top
+	warn("Library window not found; using y=%d", top)
+	return top, h - top, false
 }
 
-// fresh computes the stats and draws the card for the Library area at
-// (top, libH). It returns the card's position and size; the card image is
-// written to cardTmp.
-func fresh(scr *screen.Screen, appDir string, top, libH int) (x, y, w, h int, err error) {
+// fresh computes the stats and draws the card for the area at (top, areaH).
+// It returns where the image written to cardTmp goes and its size: just the
+// card (transparent corners, blended over the Library), or with focus the
+// whole area, blank with the card in the middle.
+func fresh(scr *screen.Screen, top, areaH int, focus bool) (x, y, w, h int, err error) {
 	t := time.Now()
 	bks := books.Collect(documents, ccdb)
 	for _, b := range bks {
@@ -280,21 +290,28 @@ func fresh(scr *screen.Screen, appDir string, top, libH int) (x, y, w, h int, er
 		return 0, 0, 0, 0, fmt.Errorf("fonts: %w", err)
 	}
 	img := card.Draw(s, clock.Date(now), fonts, scale)
-	// too tall for the Library area (e.g. a bottom menu bar): shrink to fit
+	// too tall for the area: shrink to fit
 	need := float64(img.Rect.Dy()) + (cardGap+bottomGap+6)*scale
-	if need > float64(libH) {
-		scale *= float64(libH) / need
+	if need > float64(areaH) {
+		scale *= float64(areaH) / need
 		fonts, _ = card.LoadFonts(card.KindleFonts[0], card.KindleFonts[1], scale)
 		img = card.Draw(s, clock.Date(now), fonts, scale)
 	}
 	framed := card.Frame(img, scale)
-	if err := writePNG(cardTmp, framed); err != nil {
+	var out image.Image = framed
+	if focus {
+		x, y, w, h = 0, top, scr.Width, areaH
+		out = card.OnBlank(framed, w, h)
+	} else {
+		x = card.Left(scr.Width, scale)
+		y = top + int(math.RoundToEven(cardGap*scale))
+		w, h = framed.Rect.Dx(), framed.Rect.Dy()
+	}
+	if err := writePNG(cardTmp, out); err != nil {
 		return 0, 0, 0, 0, err
 	}
-	x = card.Left(scr.Width, scale)
-	y = top + int(math.RoundToEven(cardGap*scale))
 	info("card drawn at scale %.3f in %.2fs", scale, time.Since(t).Seconds())
-	return x, y, framed.Rect.Dx(), framed.Rect.Dy(), nil
+	return x, y, w, h, nil
 }
 
 func writePNG(path string, img image.Image) error {
@@ -310,8 +327,142 @@ func writePNG(path string, img image.Image) error {
 	return f.Close()
 }
 
+// showX shows an image file in an X window that also catches taps (used
+// while holding the Library; see ImageWindow).
+func showX(xd *xshield.Display, shield *uint32, path string, x, y, w, h int) error {
+	if xd == nil {
+		return fmt.Errorf("no X connection")
+	}
+	img := loadPNG(path)
+	if img == nil {
+		return fmt.Errorf("can't read %s", path)
+	}
+	b := img.Bounds()
+	grey := make([]byte, w*h)
+	for i := range grey {
+		grey[i] = 0xFF
+	}
+	for yy := 0; yy < h && yy < b.Dy(); yy++ {
+		for xx := 0; xx < w && xx < b.Dx(); xx++ {
+			r, _, _, a := img.At(b.Min.X+xx, b.Min.Y+yy).RGBA()
+			if a == 0 {
+				continue
+			}
+			grey[yy*w+xx] = uint8(r >> 8)
+		}
+	}
+	wid, err := xd.ImageWindow(x, y, w, h, grey)
+	if err != nil {
+		return err
+	}
+	*shield = wid
+	return nil
+}
+
+func loadPNG(path string) image.Image {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	img, err := png.Decode(f)
+	if err != nil {
+		return nil
+	}
+	return img
+}
+
+// onScreen reports whether the screen grab still shows the card: its solid
+// pixels match within a little tolerance (the e-ink driver may round greys).
+func onScreen(grab []byte, want image.Image) bool {
+	if grab == nil {
+		return true // can't tell: leave it
+	}
+	b := want.Bounds()
+	w := b.Dx()
+	if len(grab) < w*b.Dy() {
+		return true
+	}
+	bad, solid := 0, 0
+	for y := 0; y < b.Dy(); y += 2 {
+		for x := 0; x < w; x += 2 {
+			r, _, _, a := want.At(b.Min.X+x, b.Min.Y+y).RGBA()
+			if a != 0xffff {
+				continue
+			}
+			solid++
+			d := int(grab[y*w+x]) - int(r>>8)
+			if d < -24 || d > 24 {
+				bad++
+			}
+		}
+	}
+	return solid == 0 || bad*100 < solid // under 1% off
+}
+
+// holding is set when InkSights runs in the foreground of the scriptlet
+// launcher, keeping the Library paused while the card is up (see run).
+var holding bool
+
+// launcherHoldsLibrary reports whether we were started by the scriptlet
+// launcher on firmware whose Library is KPPMainApp (5.18): there the
+// launcher pauses the Library until the script ends, and the Library
+// flashes the screen when it comes back.
+func launcherHoldsLibrary() bool {
+	out, err := exec.Command("lipc-get-prop", "com.lab126.appmgrd", "activeApp").Output()
+	if err != nil || !strings.Contains(string(out), "shell_integration.launcher") {
+		return false
+	}
+	xd, err := xshield.Open(os.Getenv("DISPLAY"))
+	if err != nil {
+		return false
+	}
+	defer xd.Close()
+	holdW, holdH = xd.Width, xd.Height
+	return xd.Exists("ID:com.lab126.KPPMainApp") && holdW > 0 && holdH > 0
+}
+
+// holdW, holdH are the screen size from X, used while holding so the
+// display isn't touched before the card is drawn.
+var holdW, holdH int
+
+// detach starts a copy of this program in its own session and returns, so
+// the launcher script can end and the Library carries on behind the card.
+func detach() int {
+	exe, err := os.Executable()
+	if err != nil {
+		return 1
+	}
+	var env []string
+	for _, e := range os.Environ() {
+		if !strings.HasPrefix(e, "INKSIGHTS_FOREGROUND=") {
+			env = append(env, e)
+		}
+	}
+	cmd := exec.Command(exe)
+	cmd.Env = env
+	cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		warn("couldn't detach: %v", err)
+		return 1
+	}
+	cmd.Process.Release()
+	return 0
+}
+
 func run() int {
 	setupLogging()
+	// The launcher script runs us in the foreground. On 5.18 we stay there:
+	// while we run, the launcher keeps the Library paused, so it can't wake
+	// up and flash the screen while the card is up; it comes back (with its
+	// flash) as the card closes. Elsewhere, detach so the Library stays live
+	// behind the card.
+	if os.Getenv("INKSIGHTS_FOREGROUND") == "1" {
+		if holding = launcherHoldsLibrary(); !holding {
+			return detach()
+		}
+	}
 	if !singleInstance() {
 		info("already open")
 		return 0
@@ -327,8 +478,11 @@ func run() int {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGTERM, syscall.SIGINT)
 
-	scr, err := screen.Open()
-	if err != nil {
+	var scr *screen.Screen
+	var err error
+	if holding {
+		scr = screen.Deferred(holdW, holdH)
+	} else if scr, err = screen.Open(); err != nil {
 		warn("no screen: %v", err)
 		return 1
 	}
@@ -344,6 +498,9 @@ func run() int {
 	//    we have now (same fingerprint): then it IS the correct card. Never stale.
 	extra := []string{exe}
 	saved := loadCache(scr.Width)
+	if saved != nil && holding != (saved.Top == 0 && saved.LibH == scr.Height && saved.Focus) {
+		saved = nil // made for the other way of showing it
+	}
 	valid := false
 	var q string
 	if saved != nil {
@@ -359,6 +516,8 @@ func run() int {
 	var x, y, w, h int
 	if valid {
 		x, y, w, h = saved.X, saved.Y, saved.W, saved.H
+	}
+	if valid && !holding {
 		if err := scr.Show(cachePNG, x, y); err != nil {
 			warn("%v", err)
 			valid = false
@@ -368,9 +527,9 @@ func run() int {
 	}
 
 	// 2. The invisible window over the Library (at last time's position if known).
-	top, libH := -1, 0
+	top, libH, focus := -1, 0, false
 	if saved != nil {
-		top, libH = saved.Top, saved.LibH
+		top, libH, focus = saved.Top, saved.LibH, saved.Focus
 	}
 	remembered := top >= 0
 	var shield uint32
@@ -380,9 +539,11 @@ func run() int {
 		xd = nil
 	}
 	if top < 0 {
-		top, libH = libraryArea(xd, scr.Width, scr.Height)
+		top, libH, focus = libraryArea(xd, scr.Width, scr.Height)
 	}
-	if xd != nil {
+	// No separate shield while holding: the card itself is then an X window
+	// (see showX), which catches taps, over a Library that's paused.
+	if xd != nil && !holding {
 		if shield, err = xd.Shield(0, top, scr.Width, libH); err != nil {
 			warn("no shield, card may be painted over: %v", err)
 		} else {
@@ -415,30 +576,54 @@ func run() int {
 		}
 	}()
 
+	if valid && holding {
+		err := showX(xd, &shield, cachePNG, x, y, w, h)
+		if err != nil {
+			warn("X drawing failed (%v); using FBInk", err)
+			err = scr.Show(cachePNG, x, y)
+		}
+		if err != nil {
+			warn("%v", err)
+			valid = false
+		} else {
+			info("card shown %.2fs after start%s", since(), launched)
+		}
+	}
+
 	if !valid {
 		// 3. Fresh stats, drawn over the Library as it is now.
-		x, y, w, h, err = fresh(scr, appDir, top, libH)
+		x, y, w, h, err = fresh(scr, top, libH, focus)
 		if err != nil {
 			warn("card failed: %v", err)
 			return 1
 		}
-		if err := scr.Show(cardTmp, x, y); err != nil {
+		show := scr.Show
+		if holding {
+			show = func(p string, x, y int) error {
+				if err := showX(xd, &shield, p, x, y, w, h); err != nil {
+					warn("X drawing failed (%v); using FBInk", err)
+					return scr.Show(p, x, y)
+				}
+				return nil
+			}
+		}
+		if err := show(cardTmp, x, y); err != nil {
 			warn("%v", err)
 			return 1
 		}
 		info("card shown %.2fs after start%s", since(), launched)
 
 		// 4. Remembered Library position still right? (not time-critical now)
-		saveTop, saveH := top, libH
+		saveTop, saveH, saveFocus := top, libH, focus
 		if remembered && xd != nil {
-			if rt, rh := libraryArea(xd, scr.Width, scr.Height); rt != top || rh != libH {
+			if rt, rh, rf := libraryArea(xd, scr.Width, scr.Height); rt != top || rh != libH || rf != focus {
 				warn("Library moved to y=%d h=%d; next launch will use it", rt, rh)
-				saveTop, saveH = rt, rh
+				saveTop, saveH, saveFocus = rt, rh, rf
 			}
 		}
 		// fingerprint AFTER computing: logging this launch's reading changes the inputs
 		q = fingerprint.Quick(documents, snapshots, clock.Date(clock.Now()), extra...)
-		saveCache(cache{ScreenW: scr.Width, X: x, Y: y, W: w, H: h, Top: saveTop, LibH: saveH,
+		saveCache(cache{ScreenW: scr.Width, X: x, Y: y, W: w, H: h, Top: saveTop, LibH: saveH, Focus: saveFocus,
 			Quick: q, Full: fingerprint.Full(q, ccdb)})
 
 		// 5. Reading data changed, so refresh the sidecar backups (card's already up).
@@ -447,20 +632,32 @@ func run() int {
 		info("backed up %d sidecar file(s) in %.2fs", n, time.Since(t).Seconds())
 	}
 
-	drawn := scr.Grab(x, y, w, h)
 	shown := cachePNG
 	if !valid {
 		shown = cardTmp
 	}
-	check := time.NewTimer(recheck)
+	want := loadPNG(shown)
+	// The Library may repaint itself in the first seconds after a launch
+	// (more than once on newer firmware), so compare the screen with the card
+	// a few times and redraw whatever got painted over.
+	shownAt := time.Now()
+	checks := []time.Duration{500 * time.Millisecond, 1500 * time.Millisecond, recheck, 6 * time.Second}
+	if holding {
+		// The card is an X window over a paused Library: nothing can paint over it.
+		checks = []time.Duration{backstop}
+	}
+	check := time.NewTimer(checks[0])
 	end := time.NewTimer(backstop - time.Since(tStart))
 	for {
 		select {
 		case <-check.C:
-			// only redraw if something actually painted over the card
-			if drawn != nil && string(scr.Grab(x, y, w, h)) != string(drawn) {
+			if want != nil && !onScreen(scr.Grab(x, y, w, h), want) {
 				scr.Show(shown, x, y)
-				info("card was painted over; redrawn")
+				info("card was painted over; redrawn (%.1fs)", since())
+			}
+			checks = checks[1:]
+			if len(checks) > 0 {
+				check.Reset(checks[0] - time.Since(shownAt))
 			}
 		case <-end.C:
 			info("closed: backstop timeout")
@@ -470,7 +667,7 @@ func run() int {
 			return 0
 		case t := <-taps:
 			where := "card/library"
-			if t.Y >= 0 && t.Y < top {
+			if !focus && t.Y >= 0 && t.Y < top {
 				where = "menu bar"
 			}
 			info("closed: tap at (%d, %d) (%s)", t.X, t.Y, where)

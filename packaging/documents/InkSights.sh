@@ -28,6 +28,9 @@ if nice -n -10 true 2>/dev/null; then
         BOOST="$BOOST ionice -c 2 -n 0"
     fi
 fi
-# Return straight away so the Library isn't blocked; the card closes itself.
-RS_LAUNCHED=$(date +%s) INKSIGHTS_DIR="$APP" DISPLAY=:0 $BOOST "$RUN" >> /mnt/us/reading-stats/launch.log 2>&1 &
+# InkSights decides: on firmware where the Library pauses while a scriptlet
+# runs (5.18), it stays until the card is closed so the Library can't wake
+# up and flash the screen under the card; elsewhere it carries on in the
+# background and this returns straight away.
+RS_LAUNCHED=$(date +%s) INKSIGHTS_FOREGROUND=1 INKSIGHTS_DIR="$APP" DISPLAY=:0 $BOOST "$RUN" >> /mnt/us/reading-stats/launch.log 2>&1
 exit 0

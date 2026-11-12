@@ -46,6 +46,11 @@ type Display struct {
 	idBase, idMask uint32
 	nextID         uint32
 	Root           uint32
+	Depth          int  // root window depth
+	MaxRequest     int  // in 4-byte units
+	ImageLSB       bool // image byte order
+	PadBits        int  // scanline pad for the root depth
+	RootVisual     uint32
 	Width, Height  int
 }
 
@@ -145,6 +150,20 @@ func (d *Display) setup(authName, authData []byte) error {
 		return errors.New("short X setup reply")
 	}
 	d.Root = le.Uint32(body[off:])
+	d.MaxRequest = int(le.Uint16(body[18:]))
+	d.ImageLSB = body[22] == 0
+	d.RootVisual = le.Uint32(body[off+32:])
+	d.Depth = int(body[off+38])
+	// pixmap formats: depth, bits per pixel, scanline pad (8 bytes each)
+	fo := 32 + vendorLen + pad(vendorLen)
+	for i := 0; i < nFormats; i++ {
+		if int(body[fo+8*i]) == d.Depth {
+			d.PadBits = int(body[fo+8*i+2])
+			if bpp := int(body[fo+8*i+1]); bpp != d.Depth {
+				d.PadBits = -bpp // flag: bits per pixel differs from depth
+			}
+		}
+	}
 	d.Width, d.Height = int(le.Uint16(body[off+20:])), int(le.Uint16(body[off+22:]))
 	return nil
 }
@@ -268,6 +287,39 @@ func (d *Display) FindWindow(needles ...string) (x, y, w, h int, ok bool) {
 	return
 }
 
+// Exists reports whether any top-level window's name contains every needle
+// (mapped or not).
+func (d *Display) Exists(needles ...string) bool {
+	kids, err := d.Children(d.Root)
+	if err != nil {
+		return false
+	}
+	for _, k := range kids {
+		if name, err := d.Name(k); err == nil && containsAll(name, needles) {
+			return true
+		}
+	}
+	return false
+}
+
+// ViewableList lists the viewable top-level windows as "name x,y wxh".
+func (d *Display) ViewableList() []string {
+	kids, err := d.Children(d.Root)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, k := range kids {
+		if v, err := d.Viewable(k); err != nil || !v {
+			continue
+		}
+		name, _ := d.Name(k)
+		x, y, w, h, _ := d.Geometry(k)
+		out = append(out, fmt.Sprintf("%q %d,%d %dx%d", name, x, y, w, h))
+	}
+	return out
+}
+
 func containsAll(s string, subs []string) bool {
 	for _, n := range subs {
 		if !strings.Contains(s, n) {
@@ -278,7 +330,9 @@ func containsAll(s string, subs []string) bool {
 }
 
 // Shield maps an invisible input-catching window and returns its id.
-func (d *Display) Shield(x, y, w, h int) (uint32, error) {
+func (d *Display) Shield(x, y, w, h int) (uint32, error) { return d.shield(x, y, w, h) }
+
+func (d *Display) shield(x, y, w, h int) (uint32, error) {
 	wid := d.idBase | (d.nextID & d.idMask)
 	d.nextID++
 	b := make([]byte, 40)
@@ -307,6 +361,56 @@ func (d *Display) Shield(x, y, w, h int) (uint32, error) {
 	le.PutUint16(cfg[8:], 0x40)
 	le.PutUint32(cfg[12:], 0)
 	d.send(cfg)
+	return wid, d.sync()
+}
+
+// ImageWindow maps a window at (x, y) showing an 8-bit grey image (w*h
+// bytes, one per pixel) and catching input, and returns its id. Drawing
+// through X lets the Kindle refresh the screen the way it does for its own
+// apps. Needs an 8-bit deep screen with 8 bits per pixel.
+func (d *Display) ImageWindow(x, y, w, h int, grey []byte) (uint32, error) {
+	if d.Depth != 8 || d.PadBits <= 0 || len(grey) < w*h {
+		return 0, fmt.Errorf("X screen isn't 8-bit grey (depth %d)", d.Depth)
+	}
+	wid, err := d.shield(x, y, w, h)
+	if err != nil {
+		return 0, err
+	}
+	gc := d.idBase | (d.nextID & d.idMask)
+	d.nextID++
+	d.send(req(55, 0, gc, wid, 0)) // CreateGC, no values
+	padBytes := d.PadBits / 8
+	stride := (w + padBytes - 1) / padBytes * padBytes
+	maxBytes := d.MaxRequest*4 - 24
+	if maxBytes > 256*1024 {
+		maxBytes = 256 * 1024
+	}
+	rows := maxBytes / stride
+	if rows < 1 {
+		return 0, fmt.Errorf("image rows too wide for X")
+	}
+	for top := 0; top < h; top += rows {
+		n := rows
+		if top+n > h {
+			n = h - top
+		}
+		data := make([]byte, 24+stride*n)
+		data[0] = 72 // PutImage
+		data[1] = 2  // ZPixmap
+		le.PutUint16(data[2:], uint16(len(data)/4))
+		le.PutUint32(data[4:], wid)
+		le.PutUint32(data[8:], gc)
+		le.PutUint16(data[12:], uint16(w))
+		le.PutUint16(data[14:], uint16(n))
+		le.PutUint16(data[16:], 0)
+		le.PutUint16(data[18:], uint16(top))
+		data[20] = 0 // left pad
+		data[21] = 8 // depth
+		for r := 0; r < n; r++ {
+			copy(data[24+r*stride:], grey[(top+r)*w:(top+r+1)*w])
+		}
+		d.send(data)
+	}
 	return wid, d.sync()
 }
 
