@@ -4,10 +4,10 @@
 #
 # Writes one line to /mnt/us/reading-stats/activity.log each time the Kindle
 # wakes or sleeps (and which book was open at sleep). InkSights uses it to put
-# reading time on the day it happened (see activity.py). It does nothing else
+# reading time on the day it happened (see app/internal/activity). It does nothing else
 # and sits idle in lipc-wait-event between events.
 #
-# main.py starts it from a copy in /tmp, in its own session, the first time
+# InkSights starts it from a copy in /tmp, in its own session, the first time
 # InkSights is opened after a restart. Nothing here is held open on /mnt/us:
 # USB drive mode kills processes using /mnt/us, and each line is written with
 # a short append.

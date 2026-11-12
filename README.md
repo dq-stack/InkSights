@@ -16,41 +16,41 @@ pops up over it:
 </p>
 <p align="center"><sub>Left: two days in. Right: six months of demo data. (Previews; on the Kindle the card uses its Amazon Ember font.)</sub></p>
 
-Tap anywhere to close it. The menu bar stays live, so Home, Settings and
-Search work (and close the card). Putting the Kindle to sleep closes it too.
+Tap anywhere to close it; putting the Kindle to sleep closes it too. On
+firmware 5.18 the card has the screen to itself and the Library comes back
+when you close it.
 
 The numbers come from the Kindle's own reading timer and library database.
 Kindle system files are only ever **read**, never changed.
 
 ## Requirements
 
-- A **jailbroken Kindle with Scriptlet support** (`.sh` files in `documents`
-  show up in the Library). Developed and tested on a Paperwhite 2,
-  FW 5.12.2.2; other models should work but are untested.
-- **NiLuJe's Python 3** in `/mnt/us/python3` (the next section covers it).
+- A **jailbroken Kindle on firmware 5.16.3 or newer** (the "hard-float"
+  firmware), with Scriptlet support: `.sh` files in `documents` show up in
+  the Library. Modern jailbreaks (WinterBreak, SpiderCat, AdBreak and the
+  like) set this up for you.
+- **FBInk**, which modern jailbreaks install too (InkSights looks for it in
+  the usual places).
 - Books read in the **stock Kindle reader** (KOReader keeps its own stats).
 
+Tested on a Kindle 11th gen (2022), FW 5.18.1. Nothing else to install:
+InkSights is a single program.
+
+**Older Kindle?** (firmware before 5.16.3, e.g. a Paperwhite 2 on 5.12) Use
+[InkSights v1.2.0](../../releases/tag/v1.2.0), the Python version. It needs
+NiLuJe's Python 3 and is no longer being developed. Your `reading-stats/`
+folder works with both, so you can move it to a newer Kindle.
+
 ## Install
-
-### 1. Python 3 (once)
-
-If you use KUAL + MRPI, install NiLuJe's Python package the usual way.
-Otherwise, no installer needed:
-
-1. Download `kindle-python-*.tar.xz` from NiLuJe's
-   [Snapshots thread](https://www.mobileread.com/forums/showthread.php?t=225030).
-2. On your computer: `python3 tools/extract-kindle-python.py kindle-python-*.tar.xz`
-   (add `--touch` for a Kindle Touch / Paperwhite 1).
-3. Copy the `python3` folder it creates to the root of the Kindle's USB drive.
-
-### 2. InkSights
 
 Unzip `inksights-<version>.zip` from the
 [latest release](../../releases/latest) and copy its `extensions` and
 `documents` folders onto the Kindle's USB drive (merge with what's there).
 Eject, and **InkSights** appears in your Library.
 
-The first launch takes a few seconds longer while Python warms up.
+**Moving from another Kindle?** Copy its `reading-stats/` folder to the root
+of the new Kindle before you open InkSights the first time, and your log,
+streaks and totals carry on.
 
 ### Uninstall
 
@@ -142,25 +142,33 @@ files from `kindle-reading/` into that book's `.sdr` folder on the Kindle
 
 ## Development
 
-- `src/`: the Kindle app (`main.py` entry point); `calibre-plugin/`: the plugin
-- `python3 -m unittest discover -s tests` runs the tests (some use a local
-  `sample/` copy of a Kindle's documents folder and skip without it);
+- `app/`: the Kindle app in Go (`cmd/inksights` is the program,
+  `internal/` the parts); `calibre-plugin/`: the calibre plugin;
+  `packaging/`: the Library tile and the wake/sleep recorder
+- Needs **Go 1.23** (1.24 and later dropped the older Linux kernels some
+  Kindles run). `cd app && go test ./...` runs the tests;
   `calibre-debug -e tests/calibre_core_check.py` tests the plugin core
-- `tools/mockup.py` renders the card on a Mac; `tools/deploy.sh` copies the
-  checkout onto a USB-mounted Kindle; `tools/package.sh <version>` builds the
-  release downloads (CI does this when a `v*` tag is pushed)
-- `tools/redate-history.py [--write]` re-splits an existing reading log by
-  day using a USB-mounted Kindle's wake/sleep logs (dry run without
-  `--write`; keeps a `.bak` copy)
+- `tools/deploy.sh` builds the checkout and copies it to a Kindle over USB,
+  or over SSH with `KINDLE_SSH=root@<ip>`; `tools/package.sh <version>`
+  builds the release downloads (CI does this when a `v*` tag is pushed)
+- The program has a few helper commands besides showing the card:
+  - `inksights probe` (on the Kindle): what it finds (screen, FBInk, Library
+    window, touchscreen); handy for bug reports
+  - `inksights dump` (on the Kindle or on a copy of its files): the books,
+    log rows and stats one launch would produce, as JSON, without writing
+    anything
+  - `inksights render` (on a computer): draws the card from a reading log
+    into a PNG
 
 ## Licence and credits
 
-GPLv3 (see `LICENSE`), because the sidecar decoder `src/krds.py` is GPLv3.
+GPLv3 (see `LICENSE`). The sidecar decoder (`app/internal/krds`) follows
+John Howell's GPLv3 Kindle reader data store decoder, as patched in
+[zevisvei/kindle-reading-dashboard](https://github.com/zevisvei/kindle-reading-dashboard).
 
-- `krds.py`: John Howell's Kindle reader data store decoder, as patched in
-  [zevisvei/kindle-reading-dashboard](https://github.com/zevisvei/kindle-reading-dashboard)
+- [K-R-D-S](https://github.com/K-R-D-S/KRDS): the file format notes
 - Card design inspired by the KOReader patches of
   [quanganhdo](https://github.com/quanganhdo/koreader-user-patches) and
   [zenixlabs](https://github.com/zenixlabs/koreader-frankenpatches-public)
-- Drawing via [FBInk](https://github.com/NiLuJe/FBInk) and Python from
-  NiLuJe's Kindle packages
+- Drawing via [FBInk](https://github.com/NiLuJe/FBInk), or straight
+  through X on firmware 5.18
